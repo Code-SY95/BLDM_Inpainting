@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Blended Latent Diffusion [SIGGRAPH 2023]
 <a href="https://omriavrahami.com/blended-latent-diffusion-page/"><img src="https://img.shields.io/static/v1?label=Project&message=Website&color=blue"></a> 
 <a href="https://arxiv.org/abs/2206.02779"><img src="https://img.shields.io/badge/arXiv-2206.02779-b31b1b.svg"></a>
@@ -114,3 +115,7 @@ If you find this project useful for your research, please cite the following:
 
 # Acknowledgements
 This code is based on [Latent Diffusion Models](https://github.com/CompVis/latent-diffusion).
+=======
+# BLDM_Inpainting
+Pure Inpainting Code by using Blended Latent Diffusion Model
+>>>>>>> c887b21b69f638f797511a27e7f9b5ce82b7be15
