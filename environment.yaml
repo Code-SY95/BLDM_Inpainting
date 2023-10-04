@@ -1,4 +1,4 @@
-name: ldm
+name: bldm
 channels:
   - pytorch
   - huggingface

@@ -60,6 +60,8 @@ if __name__ == "__main__":
     model = instantiate_from_config(config.model)
     model.load_state_dict(
         torch.load("models/ldm/inpainting_big/last.ckpt")["state_dict"], strict=False
+        # Run the following code to download last.ckpt : wget -O models/ldm/inpainting_big/last.ckpt https://heibox.uni-heidelberg.de/f/4d9ac7ea40c64582b7c9/?dl=1
+        # torch.load("/home/oh2/swatchon-sd/512-inpainting-ema.ckpt")["state_dict"], strict=False
     )
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")

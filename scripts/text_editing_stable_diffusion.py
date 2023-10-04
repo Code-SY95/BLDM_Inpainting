@@ -29,7 +29,7 @@ class BlendedLatnetDiffusion:
             help="The path to the HuggingFace model",
         )
         parser.add_argument(
-            "--batch_size", type=int, default=4, help="The number of images to generate"
+            "--batch_size", type=int, default=1, help="The number of images to generate"
         )
         parser.add_argument(
             "--blending_start_percentage",
@@ -51,6 +51,12 @@ class BlendedLatnetDiffusion:
         pipe = StableDiffusionPipeline.from_pretrained(
             self.args.model_path, torch_dtype=torch.float16
         )
+
+        # SY
+        # pipe = StableDiffusionPipeline.from_pretrained(
+        #     "stabilityai/stable-diffusion-2-inpainting",
+        #     torch_dtype=torch.float16,)
+        
         self.vae = pipe.vae.to(self.args.device)
         self.tokenizer = pipe.tokenizer
         self.text_encoder = pipe.text_encoder.to(self.args.device)
@@ -74,7 +80,7 @@ class BlendedLatnetDiffusion:
         num_inference_steps=50,
         guidance_scale=7.5,
         generator=torch.manual_seed(42),
-        blending_percentage=0.25,
+        blending_percentage=0.25, # SY: denoising strength
     ):
         batch_size = len(prompts)
 
@@ -103,11 +109,15 @@ class BlendedLatnetDiffusion:
         uncond_embeddings = self.text_encoder(uncond_input.input_ids.to("cuda"))[0]
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
 
+        # latents = torch.randn(
+        #     (batch_size, self.unet.in_channels, height // 8, width // 8),
+        #     generator=generator,
+        # ) # SY: self.unet.in_channels = mask(=1) + masked_img(=4) + denoising_latent_img(=4)
         latents = torch.randn(
-            (batch_size, self.unet.in_channels, height // 8, width // 8),
+            (batch_size, 4, height // 8, width // 8),
             generator=generator,
         )
-        latents = latents.to("cuda").half()
+        latents = latents.to("cuda").half() # SY: [4,9,64,64]
 
         self.scheduler.set_timesteps(num_inference_steps)
 
@@ -115,26 +125,40 @@ class BlendedLatnetDiffusion:
             int(len(self.scheduler.timesteps) * blending_percentage) :
         ]:
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
-            latent_model_input = torch.cat([latents] * 2)
+            latent_model_input = torch.cat([latents] * 2) # SY: torch.Size([8, 9, 64, 64])
 
             latent_model_input = self.scheduler.scale_model_input(
                 latent_model_input, timestep=t
-            )
+            ) # SY: self.scheduler.scale_model_input(latent_model_input, timestep=t) == latent_model_input
+
+            latent_mask_batch = torch.cat([latent_mask] * 2)
+
+            masked_image_latents = source_latents * (latent_mask  < 0.5) #MJ: get the background image
+            masked_image_latents_batch = torch.cat([masked_image_latents] * 2)
+            #MJ: Add this line to the original blended-latent-diffusion, which uses
+            # StableDiffusionPipeline (txt2imge), which has num_channels_unet=self.unet.config.in_channels =9
+            latent_model_input = torch.cat([latent_model_input, latent_mask_batch, masked_image_latents_batch], dim=1)
+             #MJ: latent_mask ([1,1,64,64]) and masked_image_latents (1,4,64,64]) are broadcasted to latent_model_input ([8,9,64,64])??
 
             # predict the noise residual
             with torch.no_grad():
                 noise_pred = self.unet(
                     latent_model_input, t, encoder_hidden_states=text_embeddings
-                ).sample
+                ).sample # SY: torch.Size([8, 4, 64, 64])
 
             # perform guidance
-            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2) # SY: One each torch.Size([4, 4, 64, 64])
             noise_pred = noise_pred_uncond + guidance_scale * (
                 noise_pred_text - noise_pred_uncond
-            )
+            ) # SY: 
+            # noise_pred_text - noise_pred_uncond = zero tensor. (Because of empty prompt)
+            # noise_pred = torch.Size([4, 4, 64, 64])
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+            # SY
+            # noise_pred.shape = torch.Size([4, 4, 64, 64]) | latents.shape = torch.Size([4, 9, 64, 64])
+            # t = tensor(680)
 
             # Blending
             noise_source_latents = self.scheduler.add_noise(
