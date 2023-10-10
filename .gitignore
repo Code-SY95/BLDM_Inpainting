@@ -178,3 +178,4 @@ evaluations/
 src/
 outputs/
 models/
+*.png

@@ -465,7 +465,10 @@ class Encoder(nn.Module):
             padding=1,
         )
 
-    def forward(self, x):
+    def forward(self, x): 
+        # Sy: x = 'fabric_img/2.png' (inpaint_moon.py)
+        # Sy: x = torch.Size([1, 3, 512, 512]) (inpaint.py)
+
         # timestep embedding
         temb = None
 
